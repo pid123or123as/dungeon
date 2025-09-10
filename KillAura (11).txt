@@ -11,6 +11,9 @@ function KillAura.Init(UI, Core, notify)
     local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
     local RunService = Core.Services.RunService
 
+    -- Initialize Core.DungeonLootify
+    Core.DungeonLootify = Core.DungeonLootify or { TargetCount = 0 }
+
     -- Configuration
     local Settings = {
         Enabled = { Value = false, Default = false },
@@ -28,6 +31,7 @@ function KillAura.Init(UI, Core, notify)
             Enabled = { Value = false, Default = false },
             PartsCount = { Value = 30, Default = 30 },
             GradientSpeed = { Value = 4, Default = 4 },
+            CircleDistance = { Value = 2, Default = 2 },
             YOffset = { Value = 0, Default = 0 },
             AnimateCircle = { Value = "Jello", Default = "Jello" },
             AnimationSpeed = { Value = 2, Default = 2 },
@@ -194,7 +198,7 @@ function KillAura.Init(UI, Core, notify)
             quad.Thickness = (Settings.TargetESP.AnimateCircle.Value == "Orbit" or Settings.TargetESP.AnimateCircle.Value == "OrbitSwirl") and 1.5 or 1
             quad.Filled = false
             quad.Color = interpolateColor(Core.GradientColors.Color1.Value, Core.GradientColors.Color2.Value, i / partsCount)
-            quad.ZIndex = 1001 -- Higher ZIndex for clarity
+            quad.ZIndex = 1001
             table.insert(targetESPQuads, quad)
 
             local oppositeQuad = Drawing.new("Quad")
@@ -202,7 +206,7 @@ function KillAura.Init(UI, Core, notify)
             oppositeQuad.Thickness = (Settings.TargetESP.AnimateCircle.Value == "Orbit" or Settings.TargetESP.AnimateCircle.Value == "OrbitSwirl") and 1.5 or 1
             oppositeQuad.Filled = false
             oppositeQuad.Color = quad.Color
-            oppositeQuad.ZIndex = 1001
+            quad.ZIndex = 1001
             table.insert(targetESPOppositeQuads, oppositeQuad)
         end
 
@@ -267,9 +271,7 @@ function KillAura.Init(UI, Core, notify)
             return
         end
 
-        -- Adjust ESP radius based on distance for better visibility
-        local distance = (Core.PlayerData.Camera.CFrame.Position - center).Magnitude
-        local espRadius = 2 + math.clamp(distance / 50, 0, 2) -- Scale radius with distance
+        local espRadius = Settings.TargetESP.CircleDistance.Value
         local partsCount = #targetESPQuads
         for i, quad in ipairs(targetESPQuads) do
             local angleOffset
@@ -367,9 +369,14 @@ function KillAura.Init(UI, Core, notify)
         local startTime = tick()
         local targets = {}
         local modelsChecked = {}
+        local playerNames = {}
+        for _, player in ipairs(Players:GetPlayers()) do
+            table.insert(playerNames, player.Name)
+        end
 
         local function checkModel(model)
             if not model.Parent or table.find(ignoreFolders, model.Parent.Name) then return end
+            if table.find(playerNames, model.Name) then return end
             if model:IsA("Model") and model ~= Character and model ~= LocalPlayer.Character and not Players:GetPlayerFromCharacter(model) and not modelsChecked[model] then
                 modelsChecked[model] = true
                 if #model.Name == 7 then return end
@@ -420,7 +427,11 @@ function KillAura.Init(UI, Core, notify)
         end
 
         table.sort(targets, function(a, b) return a.distance < b.distance end)
-        if Settings.DebugLogs.Value then print("Targets found: " .. #targets .. " | Search time: " .. (tick() - startTime)) end
+        Core.DungeonLootify.TargetCount = #targets
+        if Settings.DebugLogs.Value then
+            print("Targets found: " .. #targets .. " | Search time: " .. (tick() - startTime))
+            print("Core.DungeonLootify.TargetCount updated to: " .. Core.DungeonLootify.TargetCount)
+        end
         return targets
     end
 
@@ -574,7 +585,7 @@ function KillAura.Init(UI, Core, notify)
             Character:SetAttribute("AttackCooldown", false)
             task.wait(0.01)
         end
-        cleanupDrawingObjects() -- Clean up when killaura stops
+        cleanupDrawingObjects()
     end
 
     -- Create UI Section
@@ -739,6 +750,17 @@ function KillAura.Init(UI, Core, notify)
                 notify("TargetESP", "Gradient Speed set to: " .. value)
             end
         }, 'GradientSpeedESPKA')
+        KillAuraSection:Slider({
+            Name = "Circle Distance",
+            Minimum = 0.5,
+            Maximum = 5,
+            Default = Settings.TargetESP.CircleDistance.Default,
+            Precision = 1,
+            Callback = function(value)
+                Settings.TargetESP.CircleDistance.Value = value
+                notify("TargetESP", "Circle Distance set to: " .. value)
+            end
+        }, 'CircleDistanceESPKA')
         KillAuraSection:Slider({
             Name = "Y Offset",
             Minimum = -5,
