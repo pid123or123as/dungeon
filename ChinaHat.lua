@@ -597,7 +597,7 @@ function ChinaHat.Init(UI, Core, notify)
             end,
         }, 'JumpAnimate')
 
-        local nimbSection = UI.Sections.Nimb or UI.Tabs.Visuals:Section({ Name = "Nimb", Side = "Right" })
+        local nimbSection = UI.Sections.Nimb or UI.Tabs.Visuals:Section({ Name = "Nimb", Side = "Left" })
         UI.Sections.Nimb = nimbSection
         nimbSection:Header({ Name = "Nimb" })
         nimbSection:SubLabel({ Text = "Displays a circle above the player head" })
@@ -737,5 +737,6 @@ function ChinaHat.Init(UI, Core, notify)
 end
 
 return ChinaHat
+
 
 
