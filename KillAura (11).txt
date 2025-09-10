@@ -1,5 +1,5 @@
 local KillAura = {}
-
+print('2')
 function KillAura.Init(UI, Core, notify)
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local CollectionService = game:GetService("CollectionService")
@@ -575,7 +575,7 @@ function KillAura.Init(UI, Core, notify)
 
     -- Create UI Section
     if UI and UI.Tabs then
-        UI.Sections.KillAura = UI.Sections.KillAura or UI.Tabs.Combat:Section({ Name = "KillAura", Side = "Left" })
+        KillAuraSection = UI.Sections.KillAuraSection
         KillAuraSection:Header({ Name = "Kill Aura" })
         KillAuraSection:Toggle({
             Name = "Enabled",
