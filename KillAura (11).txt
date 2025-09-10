@@ -609,6 +609,7 @@ function KillAura.Init(UI, Core, notify)
                 notify("KillAura", "Kill Aura " .. (value and "Enabled" or "Disabled"), true)
             end
         }, 'EnabledKA')
+        KillAuraSection:Divider()
         KillAuraSection:Toggle({
             Name = "Show Circles",
             Default = Settings.ShowCircles.Default,
@@ -669,6 +670,7 @@ function KillAura.Init(UI, Core, notify)
                 notify("KillAura", "Attack Height set to: " .. value)
             end
         }, 'AttackHeightKA')
+        KillAuraSection:Divider()
         KillAuraSection:Toggle({
             Name = "Use Raycast",
             Default = Settings.UseRaycast.Default,
@@ -707,6 +709,7 @@ function KillAura.Init(UI, Core, notify)
                 notify("KillAura", "Update Interval set to: " .. value)
             end
         }, 'UpdateIntervalKA')
+        KillAuraSection:Divider()
         KillAuraSection:Toggle({
             Name = "Debug Logs",
             Default = Settings.DebugLogs.Default,
@@ -715,9 +718,9 @@ function KillAura.Init(UI, Core, notify)
                 notify("KillAura", "Debug Logs " .. (value and "Enabled" or "Disabled"), true)
             end
         }, 'DebugLogsKA')
-        KillAuraSection:Header({ Name = "Target ESP Settings" })
+        KillAuraSection:Header({ Name = "Target ESP" })
         KillAuraSection:Toggle({
-            Name = "ESP Enabled",
+            Name = "Enabled",
             Default = Settings.TargetESP.Enabled.Default,
             Callback = function(value)
                 Settings.TargetESP.Enabled.Value = value
@@ -730,7 +733,7 @@ function KillAura.Init(UI, Core, notify)
         KillAuraSection:Slider({
             Name = "Parts Count",
             Minimum = 10,
-            Maximum = 50,
+            Maximum = 70,
             Default = Settings.TargetESP.PartsCount.Default,
             Precision = 0,
             Callback = function(value)
@@ -742,7 +745,7 @@ function KillAura.Init(UI, Core, notify)
         KillAuraSection:Slider({
             Name = "Gradient Speed",
             Minimum = 0.1,
-            Maximum = 5,
+            Maximum = 10,
             Default = Settings.TargetESP.GradientSpeed.Default,
             Precision = 1,
             Callback = function(value)
@@ -761,6 +764,7 @@ function KillAura.Init(UI, Core, notify)
                 notify("TargetESP", "Circle Distance set to: " .. value)
             end
         }, 'CircleDistanceESPKA')
+        KillAuraSection:Divider()
         KillAuraSection:Slider({
             Name = "Y Offset",
             Minimum = -5,
@@ -785,7 +789,7 @@ function KillAura.Init(UI, Core, notify)
         KillAuraSection:Slider({
             Name = "Animation Speed",
             Minimum = 0.1,
-            Maximum = 5,
+            Maximum = 10,
             Default = Settings.TargetESP.AnimationSpeed.Default,
             Precision = 1,
             Callback = function(value)
@@ -793,10 +797,11 @@ function KillAura.Init(UI, Core, notify)
                 notify("TargetESP", "Animation Speed set to: " .. value)
             end
         }, 'AnimationSpeedESPKA')
+        KillAuraSection:Divider()
         KillAuraSection:Slider({
             Name = "Orbit Tilt",
             Minimum = 0,
-            Maximum = 2,
+            Maximum = 3,
             Default = Settings.TargetESP.OrbitTilt.Default,
             Precision = 1,
             Callback = function(value)
