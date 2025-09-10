@@ -830,7 +830,7 @@ function KillAura.Init(UI, Core, notify)
             end
         }, 'OrbitTiltESPKA')
     end
-        ConfigSync = UI.Tabs.Config:Section({ Name = "KillAura sync", Side = "Left" })
+        ConfigSync = UI.Tabs.Config:Section({ Name = "KillAura sync", Side = "Right" })
         ConfigSync:Header({ Name = "KillAura Settings Sync" })
         ConfigSync:Button({
             Name = "Sync Config",
