@@ -1,5 +1,5 @@
 local KillAura = {}
-print('2')
+
 function KillAura.Init(UI, Core, notify)
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local CollectionService = game:GetService("CollectionService")
@@ -11,20 +11,20 @@ function KillAura.Init(UI, Core, notify)
     local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
     local RunService = game:GetService("RunService")
 
-    -- Конфигурация
+    -- Configuration
     local Settings = {
         Enabled = { Value = false, Default = false },
         MaxDistance = { Value = 100, Default = 100 },
         EnableCluster = { Value = true, Default = true },
         ClusterRadius = { Value = 8, Default = 8 },
-        AttackHeight = { Value = 1, Default = 1 },
+        AttackHeight = { Value = 2, Default = 2 },
         UseRaycast = { Value = false, Default = false },
         TestPredict = { Value = true, Default = true },
         PredictValue = { Value = 0.2, Default = 0.2 },
-        UpdateInterval = { Value = 0.02, Default = 0.02 },
+        UpdateInterval = { Value = 0.05, Default = 0.05 },
         DebugLogs = { Value = true, Default = true },
         TargetESP = {
-            Enabled = { Value = true, Default = true },
+            Enabled = { Value = false, Default = false },
             PartsCount = { Value = 30, Default = 30 },
             GradientSpeed = { Value = 4, Default = 4 },
             GradientEnabled = { Value = true, Default = true },
@@ -37,10 +37,10 @@ function KillAura.Init(UI, Core, notify)
         }
     }
 
-    -- Игнорируемые папки
+    -- Ignored folders
     local ignoreFolders = {"Bullet", "Debris", "Func", "EnvSound", "Ornament", "Rank"}
 
-    -- Визуализация через Drawing API
+    -- Visualization using Drawing API
     local Drawing = Drawing or {}
     local indicators = {}
     local targetESPQuads = {}
@@ -55,11 +55,11 @@ function KillAura.Init(UI, Core, notify)
     local currentWeaponCache = nil
     local lastWeaponCheck = 0
 
-    -- Визуалы для атаки
+    -- Attack visualization
     local function createAttackIndicator(position)
         local circle = Drawing.new("Circle")
         circle.Visible = true
-        circle.Color = Color3.new(1, 0, 0)  -- Красный
+        circle.Color = Color3.new(1, 0, 0)  -- Red
         circle.Thickness = 2
         circle.NumSides = 32
         circle.Radius = 5
@@ -85,7 +85,7 @@ function KillAura.Init(UI, Core, notify)
     local function createMultiTargetIndicator(position)
         local circle = Drawing.new("Circle")
         circle.Visible = true
-        circle.Color = Color3.new(0, 1, 0)  -- Зелёный
+        circle.Color = Color3.new(0, 1, 0)  -- Green
         circle.Thickness = 2
         circle.NumSides = 32
         circle.Radius = 7
@@ -349,17 +349,17 @@ function KillAura.Init(UI, Core, notify)
         end
     end
 
-    -- RunService.RenderStepped для ESP
+    -- RunService.RenderStepped for ESP
     RunService.RenderStepped:Connect(function()
         if Settings.TargetESP.Enabled.Value then
             updateTargetESP()
         end
     end)
 
-    -- Загрузка CombatConfig
+    -- Load CombatConfig
     local CombatConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("Program"):WaitForChild("CombatConfig"))
 
-    -- Поиск таргетов
+    -- Find targets
     local function findAllTargets()
         local startTime = tick()
         local targets = {}
@@ -421,7 +421,7 @@ function KillAura.Init(UI, Core, notify)
         return targets
     end
 
-    -- Получение оружия
+    -- Get current weapon
     local function getCurrentWeapon()
         if tick() - lastWeaponCheck < 0.5 and currentWeaponCache then return unpack(currentWeaponCache) end
         for _, tool in ipairs(Character:GetChildren()) do
@@ -435,7 +435,7 @@ function KillAura.Init(UI, Core, notify)
         return nil, nil
     end
 
-    -- Средняя CFrame для кластера с предиктом
+    -- Average CFrame for cluster with prediction
     local function getAverageCFrame(cluster, heightOffset)
         if #cluster == 0 then return nil end
         local multiTargetPos = nil
@@ -472,7 +472,7 @@ function KillAura.Init(UI, Core, notify)
         return CFrame.new(avgPos) * CFrame.new(0, heightOffset, 0) * nearestCFrame.Rotation, multiTargetPos
     end
 
-    -- Группировка таргетов
+    -- Group targets by proximity
     local function groupTargetsByProximity(targets, clusterRadius)
         local clusters = {}
         local used = {}
@@ -500,7 +500,8 @@ function KillAura.Init(UI, Core, notify)
         return clusters
     end
 
-    -- Основной цикл киллауры
+    -- Main KillAura loop
+    local killAuraCoroutine = nil
     local function runKillAura()
         while Settings.Enabled.Value do
             local interval = #cachedTargets > 0 and 0.5 or Settings.UpdateInterval.Value
@@ -572,216 +573,215 @@ function KillAura.Init(UI, Core, notify)
         end
     end
 
-    -- Запуск киллауры при включении
-    Settings.Enabled:GetPropertyChangedSignal("Value"):Connect(function()
-        if Settings.Enabled.Value then
-            task.spawn(runKillAura)
-        end
-    end)
-
-    -- UI настройки
-    UI.Sections.KillAura = UI.Sections.KillAura or UI.Tabs.Combat:Section({ Name = "KillAura", Side = "Left" })
-    if UI.Tabs and UI.Tabs.Combat then
-        if UI.Sections and UI.Sections.KillAura then
-            UI.Sections.KillAura:Header({ Name = "Kill Aura" })
-            UI.Sections.KillAura:Toggle({
-                Name = "Enabled",
-                Default = Settings.Enabled.Default,
-                Callback = function(value)
-                    Settings.Enabled.Value = value
-                    notify("KillAura", "Kill Aura " .. (value and "Enabled" or "Disabled"), true)
+    -- Create UI Section
+    if UI and UI.Tabs then
+        UI.Sections.KillAura = UI.Sections.KillAura or UI.Tabs.Combat:Section({ Name = "KillAura", Side = "Left" })
+        KillAuraSection:Header({ Name = "Kill Aura" })
+        KillAuraSection:Toggle({
+            Name = "Enabled",
+            Default = Settings.Enabled.Default,
+            Callback = function(value)
+                Settings.Enabled.Value = value
+                if value then
+                    if not killAuraCoroutine or coroutine.status(killAuraCoroutine) == "dead" then
+                        killAuraCoroutine = coroutine.create(runKillAura)
+                        coroutine.resume(killAuraCoroutine)
+                    end
+                else
+                    killAuraCoroutine = nil
                 end
-            }, 'EnabledKA')
-            UI.Sections.KillAura:Slider({
-                Name = "Max Distance",
-                Minimum = 10,
-                Maximum = 500,
-                Default = Settings.MaxDistance.Default,
-                Precision = 0,
-                Callback = function(value)
-                    Settings.MaxDistance.Value = value
-                    notify("KillAura", "Max Distance set to: " .. value)
-                end
-            }, 'MaxDistanceKA')
-            UI.Sections.KillAura:Toggle({
-                Name = "Enable Cluster",
-                Default = Settings.EnableCluster.Default,
-                Callback = function(value)
-                    Settings.EnableCluster.Value = value
-                    notify("KillAura", "Cluster " .. (value and "Enabled" or "Disabled"), true)
-                end
-            }, 'EnableClusterKA')
-            UI.Sections.KillAura:Slider({
-                Name = "Cluster Radius",
-                Minimum = 1,
-                Maximum = 10,
-                Default = Settings.ClusterRadius.Default,
-                Precision = 1,
-                Callback = function(value)
-                    Settings.ClusterRadius.Value = value
-                    notify("KillAura", "Cluster Radius set to: " .. value)
-                end
-            }, 'ClusterRadiusKA')
-            UI.Sections.KillAura:Slider({
-                Name = "Attack Height",
-                Minimum = -2,
-                Maximum = 2,
-                Default = Settings.AttackHeight.Default,
-                Precision = 1,
-                Callback = function(value)
-                    Settings.AttackHeight.Value = value
-                    notify("KillAura", "Attack Height set to: " .. value)
-                end
-            }, 'AttackHeightKA')
-            UI.Sections.KillAura:Toggle({
-                Name = "Use Raycast",
-                Default = Settings.UseRaycast.Default,
-                Callback = function(value)
-                    Settings.UseRaycast.Value = value
-                    notify("KillAura", "Raycast " .. (value and "Enabled" or "Disabled"), true)
-                end
-            }, 'UseRaycastKA')
-            UI.Sections.KillAura:Toggle({
-                Name = "Test Predict",
-                Default = Settings.TestPredict.Default,
-                Callback = function(value)
-                    Settings.TestPredict.Value = value
-                    notify("KillAura", "Predict " .. (value and "Enabled" or "Disabled"), true)
-                end
-            }, 'TestPredictKA')
-            UI.Sections.KillAura:Slider({
-                Name = "Predict Value",
-                Minimum = 0.01,
-                Maximum = 1,
-                Default = Settings.PredictValue.Default,
-                Precision = 2,
-                Callback = function(value)
-                    Settings.PredictValue.Value = value
-                    notify("KillAura", "Predict Value set to: " .. value)
-                end
-            }, 'PredictValueKA')
-            UI.Sections.KillAura:Slider({
-                Name = "Update Interval",
-                Minimum = 0.01,
-                Maximum = 1,
-                Default = Settings.UpdateInterval.Default,
-                Precision = 2,
-                Callback = function(value)
-                    Settings.UpdateInterval.Value = value
-                    notify("KillAura", "Update Interval set to: " .. value)
-                end
-            }, 'UpdateIntervalKA')
-            UI.Sections.KillAura:Toggle({
-                Name = "Debug Logs",
-                Default = Settings.DebugLogs.Default,
-                Callback = function(value)
-                    Settings.DebugLogs.Value = value
-                    notify("KillAura", "Debug Logs " .. (value and "Enabled" or "Disabled"), true)
-                end
-            }, 'DebugLogsKA')
-            UI.Sections.KillAura:Header({ Name = "Target ESP Settings" })
-            UI.Sections.KillAura:Toggle({
-                Name = "ESP Enabled",
-                Default = Settings.TargetESP.Enabled.Default,
-                Callback = function(value)
-                    Settings.TargetESP.Enabled.Value = value
-                    notify("TargetESP", "ESP " .. (value and "Enabled" or "Disabled"), true)
-                end
-            }, 'EnabledESPKA')
-            UI.Sections.KillAura:Slider({
-                Name = "Parts Count",
-                Minimum = 10,
-                Maximum = 50,
-                Default = Settings.TargetESP.PartsCount.Default,
-                Precision = 0,
-                Callback = function(value)
-                    Settings.TargetESP.PartsCount.Value = value
-                    task.defer(createTargetESP)
-                    notify("TargetESP", "Parts Count set to: " .. value)
-                end
-            }, 'PartsCountESPKA')
-            UI.Sections.KillAura:Slider({
-                Name = "Gradient Speed",
-                Minimum = 0.1,
-                Maximum = 5,
-                Default = Settings.TargetESP.GradientSpeed.Default,
-                Precision = 1,
-                Callback = function(value)
-                    Settings.TargetESP.GradientSpeed.Value = value
-                    notify("TargetESP", "Gradient Speed set to: " .. value)
-                end
-            }, 'GradientSpeedESPKA')
-            UI.Sections.KillAura:Toggle({
-                Name = "Gradient Enabled",
-                Default = Settings.TargetESP.GradientEnabled.Default,
-                Callback = function(value)
-                    Settings.TargetESP.GradientEnabled.Value = value
-                    task.defer(createTargetESP)
-                    notify("TargetESP", "Gradient " .. (value and "Enabled" or "Disabled"), true)
-                end
-            }, 'GradientEnabledESPKA')
-            UI.Sections.KillAura:Colorpicker({
-                Name = "ESP Color 1",
-                Default = Settings.TargetESP.Color1.Default,
-                Callback = function(value)
-                    Settings.TargetESP.Color1.Value = value
-                    task.defer(createTargetESP)
-                    notify("TargetESP", "Color 1 set to: R=" .. math.floor(value.R * 255) .. ", G=" .. math.floor(value.G * 255) .. ", B=" .. math.floor(value.B * 255))
-                end
-            }, 'Color1ESPKA')
-            UI.Sections.KillAura:Colorpicker({
-                Name = "ESP Color 2",
-                Default = Settings.TargetESP.Color2.Default,
-                Callback = function(value)
-                    Settings.TargetESP.Color2.Value = value
-                    task.defer(createTargetESP)
-                    notify("TargetESP", "Color 2 set to: R=" .. math.floor(value.R * 255) .. ", G=" .. math.floor(value.G * 255) .. ", B=" .. math.floor(value.B * 255))
-                end
-            }, 'Color2ESPKA')
-            UI.Sections.KillAura:Slider({
-                Name = "Y Offset",
-                Minimum = -5,
-                Maximum = 5,
-                Default = Settings.TargetESP.YOffset.Default,
-                Precision = 1,
-                Callback = function(value)
-                    Settings.TargetESP.YOffset.Value = value
-                    notify("TargetESP", "Y Offset set to: " .. value)
-                end
-            }, 'YOffsetESPKA')
-            UI.Sections.KillAura:Dropdown({
-                Name = "Animate Circle",
-                Options = {"None", "Jello", "Orbit", "OrbitSwirl"},
-                Default = Settings.TargetESP.AnimateCircle.Default,
-                Callback = function(value)
-                    Settings.TargetESP.AnimateCircle.Value = value
-                    task.defer(createTargetESP)
-                    notify("TargetESP", "Animation set to: " .. value, true)
-                end
-            }, 'AnimateCircleESPKA')
-            UI.Sections.KillAura:Slider({
-                Name = "Animation Speed",
-                Minimum = 0.1,
-                Maximum = 5,
-                Default = Settings.TargetESP.AnimationSpeed.Default,
-                Precision = 1,
-                Callback = function(value)
-                    Settings.TargetESP.AnimationSpeed.Value = value
-                    notify("TargetESP", "Animation Speed set to: " .. value)
-                end
-            }, 'AnimationSpeedESPKA')
-            UI.Sections.KillAura:Slider({
-                Name = "Orbit Tilt",
-                Minimum = 0,
-                Maximum = 2,
-                Default = Settings.TargetESP.OrbitTilt.Default,
-                Precision = 1,
-                Callback = function(value)
-                    Settings.TargetESP.OrbitTilt.Value = value
-                    notify("TargetESP", "Orbit Tilt set to: " .. value)
-                end
-            }, 'OrbitTiltESPKA')
-        end
+                notify("KillAura", "Kill Aura " .. (value and "Enabled" or "Disabled"), true)
+            end
+        }, 'EnabledKA')
+        KillAuraSection:Slider({
+            Name = "Max Distance",
+            Minimum = 10,
+            Maximum = 500,
+            Default = Settings.MaxDistance.Default,
+            Precision = 0,
+            Callback = function(value)
+                Settings.MaxDistance.Value = value
+                notify("KillAura", "Max Distance set to: " .. value)
+            end
+        }, 'MaxDistanceKA')
+        KillAuraSection:Toggle({
+            Name = "Enable Cluster",
+            Default = Settings.EnableCluster.Default,
+            Callback = function(value)
+                Settings.EnableCluster.Value = value
+                notify("KillAura", "Cluster " .. (value and "Enabled" or "Disabled"), true)
+            end
+        }, 'EnableClusterKA')
+        KillAuraSection:Slider({
+            Name = "Cluster Radius",
+            Minimum = 1,
+            Maximum = 10,
+            Default = Settings.ClusterRadius.Default,
+            Precision = 1,
+            Callback = function(value)
+                Settings.ClusterRadius.Value = value
+                notify("KillAura", "Cluster Radius set to: " .. value)
+            end
+        }, 'ClusterRadiusKA')
+        KillAuraSection:Slider({
+            Name = "Attack Height",
+            Minimum = -2,
+            Maximum = 2,
+            Default = Settings.AttackHeight.Default,
+            Precision = 1,
+            Callback = function(value)
+                Settings.AttackHeight.Value = value
+                notify("KillAura", "Attack Height set to: " .. value)
+            end
+        }, 'AttackHeightKA')
+        KillAuraSection:Toggle({
+            Name = "Use Raycast",
+            Default = Settings.UseRaycast.Default,
+            Callback = function(value)
+                Settings.UseRaycast.Value = value
+                notify("KillAura", "Raycast " .. (value and "Enabled" or "Disabled"), true)
+            end
+        }, 'UseRaycastKA')
+        KillAuraSection:Toggle({
+            Name = "Test Predict",
+            Default = Settings.TestPredict.Default,
+            Callback = function(value)
+                Settings.TestPredict.Value = value
+                notify("KillAura", "Predict " .. (value and "Enabled" or "Disabled"), true)
+            end
+        }, 'TestPredictKA')
+        KillAuraSection:Slider({
+            Name = "Predict Value",
+            Minimum = 0.01,
+            Maximum = 1,
+            Default = Settings.PredictValue.Default,
+            Precision = 2,
+            Callback = function(value)
+                Settings.PredictValue.Value = value
+                notify("KillAura", "Predict Value set to: " .. value)
+            end
+        }, 'PredictValueKA')
+        KillAuraSection:Slider({
+            Name = "Update Interval",
+            Minimum = 0.01,
+            Maximum = 1,
+            Default = Settings.UpdateInterval.Default,
+            Precision = 2,
+            Callback = function(value)
+                Settings.UpdateInterval.Value = value
+                notify("KillAura", "Update Interval set to: " .. value)
+            end
+        }, 'UpdateIntervalKA')
+        KillAuraSection:Toggle({
+            Name = "Debug Logs",
+            Default = Settings.DebugLogs.Default,
+            Callback = function(value)
+                Settings.DebugLogs.Value = value
+                notify("KillAura", "Debug Logs " .. (value and "Enabled" or "Disabled"), true)
+            end
+        }, 'DebugLogsKA')
+        KillAuraSection:Header({ Name = "Target ESP Settings" })
+        KillAuraSection:Toggle({
+            Name = "ESP Enabled",
+            Default = Settings.TargetESP.Enabled.Default,
+            Callback = function(value)
+                Settings.TargetESP.Enabled.Value = value
+                notify("TargetESP", "ESP " .. (value and "Enabled" or "Disabled"), true)
+            end
+        }, 'EnabledESPKA')
+        KillAuraSection:Slider({
+            Name = "Parts Count",
+            Minimum = 10,
+            Maximum = 50,
+            Default = Settings.TargetESP.PartsCount.Default,
+            Precision = 0,
+            Callback = function(value)
+                Settings.TargetESP.PartsCount.Value = value
+                task.defer(createTargetESP)
+                notify("TargetESP", "Parts Count set to: " .. value)
+            end
+        }, 'PartsCountESPKA')
+        KillAuraSection:Slider({
+            Name = "Gradient Speed",
+            Minimum = 0.1,
+            Maximum = 5,
+            Default = Settings.TargetESP.GradientSpeed.Default,
+            Precision = 1,
+            Callback = function(value)
+                Settings.TargetESP.GradientSpeed.Value = value
+                notify("TargetESP", "Gradient Speed set to: " .. value)
+            end
+        }, 'GradientSpeedESPKA')
+        KillAuraSection:Toggle({
+            Name = "Gradient Enabled",
+            Default = Settings.TargetESP.GradientEnabled.Default,
+            Callback = function(value)
+                Settings.TargetESP.GradientEnabled.Value = value
+                task.defer(createTargetESP)
+                notify("TargetESP", "Gradient " .. (value and "Enabled" or "Disabled"), true)
+            end
+        }, 'GradientEnabledESPKA')
+        KillAuraSection:Colorpicker({
+            Name = "ESP Color 1",
+            Default = Settings.TargetESP.Color1.Default,
+            Callback = function(value)
+                Settings.TargetESP.Color1.Value = value
+                task.defer(createTargetESP)
+                notify("TargetESP", "Color 1 set to: R=" .. math.floor(value.R * 255) .. ", G=" .. math.floor(value.G * 255) .. ", B=" .. math.floor(value.B * 255))
+            end
+        }, 'Color1ESPKA')
+        KillAuraSection:Colorpicker({
+            Name = "ESP Color 2",
+            Default = Settings.TargetESP.Color2.Default,
+            Callback = function(value)
+                Settings.TargetESP.Color2.Value = value
+                task.defer(createTargetESP)
+                notify("TargetESP", "Color 2 set to: R=" .. math.floor(value.R * 255) .. ", G=" .. math.floor(value.G * 255) .. ", B=" .. math.floor(value.B * 255))
+            end
+        }, 'Color2ESPKA')
+        KillAuraSection:Slider({
+            Name = "Y Offset",
+            Minimum = -5,
+            Maximum = 5,
+            Default = Settings.TargetESP.YOffset.Default,
+            Precision = 1,
+            Callback = function(value)
+                Settings.TargetESP.YOffset.Value = value
+                notify("TargetESP", "Y Offset set to: " .. value)
+            end
+        }, 'YOffsetESPKA')
+        KillAuraSection:Dropdown({
+            Name = "Animate Circle",
+            Options = {"None", "Jello", "Orbit", "OrbitSwirl"},
+            Default = Settings.TargetESP.AnimateCircle.Default,
+            Callback = function(value)
+                Settings.TargetESP.AnimateCircle.Value = value
+                task.defer(createTargetESP)
+                notify("TargetESP", "Animation set to: " .. value, true)
+            end
+        }, 'AnimateCircleESPKA')
+        KillAuraSection:Slider({
+            Name = "Animation Speed",
+            Minimum = 0.1,
+            Maximum = 5,
+            Default = Settings.TargetESP.AnimationSpeed.Default,
+            Precision = 1,
+            Callback = function(value)
+                Settings.TargetESP.AnimationSpeed.Value = value
+                notify("TargetESP", "Animation Speed set to: " .. value)
+            end
+        }, 'AnimationSpeedESPKA')
+        KillAuraSection:Slider({
+            Name = "Orbit Tilt",
+            Minimum = 0,
+            Maximum = 2,
+            Default = Settings.TargetESP.OrbitTilt.Default,
+            Precision = 1,
+            Callback = function(value)
+                Settings.TargetESP.OrbitTilt.Value = value
+                notify("TargetESP", "Orbit Tilt set to: " .. value)
+            end
+        }, 'OrbitTiltESPKA')
     end
 
     return KillAura
