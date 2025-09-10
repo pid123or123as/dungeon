@@ -1,0 +1,791 @@
+local KillAura = {}
+
+function KillAura.Init(UI, Core, notify)
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local CollectionService = game:GetService("CollectionService")
+    local TNetSent = ReplicatedStorage:WaitForChild("TNetSent")
+    local Workspace = game:GetService("Workspace")
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+    local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+    local RunService = game:GetService("RunService")
+
+    -- Конфигурация
+    local Settings = {
+        Enabled = { Value = false, Default = false },
+        MaxDistance = { Value = 100, Default = 100 },
+        EnableCluster = { Value = true, Default = true },
+        ClusterRadius = { Value = 8, Default = 8 },
+        AttackHeight = { Value = 1, Default = 1 },
+        UseRaycast = { Value = false, Default = false },
+        TestPredict = { Value = true, Default = true },
+        PredictValue = { Value = 0.2, Default = 0.2 },
+        UpdateInterval = { Value = 0.02, Default = 0.02 },
+        DebugLogs = { Value = true, Default = true },
+        TargetESP = {
+            Enabled = { Value = true, Default = true },
+            PartsCount = { Value = 30, Default = 30 },
+            GradientSpeed = { Value = 4, Default = 4 },
+            GradientEnabled = { Value = true, Default = true },
+            Color1 = { Value = Color3.fromRGB(0, 0, 255), Default = Color3.fromRGB(0, 0, 255) },
+            Color2 = { Value = Color3.fromRGB(255, 0, 0), Default = Color3.fromRGB(255, 0, 0) },
+            YOffset = { Value = 0, Default = 0 },
+            AnimateCircle = { Value = "Jello", Default = "Jello" },
+            AnimationSpeed = { Value = 2, Default = 2 },
+            OrbitTilt = { Value = 0.7, Default = 0.7 }
+        }
+    }
+
+    -- Игнорируемые папки
+    local ignoreFolders = {"Bullet", "Debris", "Func", "EnvSound", "Ornament", "Rank"}
+
+    -- Визуализация через Drawing API
+    local Drawing = Drawing or {}
+    local indicators = {}
+    local targetESPQuads = {}
+    local targetESPBlurQuads = {}
+    local targetESPOppositeQuads = {}
+    local lastTarget = nil
+    local cachedTargets = {}
+    local lastTargetUpdate = 0
+    local invokeID = math.random(1, 10000)
+    local slashCounter = {}
+    local hitNumCounter = {}
+    local currentWeaponCache = nil
+    local lastWeaponCheck = 0
+
+    -- Визуалы для атаки
+    local function createAttackIndicator(position)
+        local circle = Drawing.new("Circle")
+        circle.Visible = true
+        circle.Color = Color3.new(1, 0, 0)  -- Красный
+        circle.Thickness = 2
+        circle.NumSides = 32
+        circle.Radius = 5
+        circle.Filled = false
+        circle.Position = Vector2.new(0, 0)
+        circle.ZIndex = 1000
+
+        local updateConn = RunService.RenderStepped:Connect(function()
+            local screenPos, onScreen = Workspace.CurrentCamera:WorldToViewportPoint(position)
+            circle.Visible = onScreen
+            if onScreen then
+                circle.Position = Vector2.new(screenPos.X, screenPos.Y)
+            end
+        end)
+
+        table.insert(indicators, {circle = circle, connection = updateConn})
+        task.delay(0.5, function()
+            circle:Remove()
+            updateConn:Disconnect()
+        end)
+    end
+
+    local function createMultiTargetIndicator(position)
+        local circle = Drawing.new("Circle")
+        circle.Visible = true
+        circle.Color = Color3.new(0, 1, 0)  -- Зелёный
+        circle.Thickness = 2
+        circle.NumSides = 32
+        circle.Radius = 7
+        circle.Filled = true
+        circle.Position = Vector2.new(0, 0)
+        circle.ZIndex = 999
+
+        local updateConn = RunService.RenderStepped:Connect(function()
+            local screenPos, onScreen = Workspace.CurrentCamera:WorldToViewportPoint(position)
+            circle.Visible = onScreen
+            if onScreen then
+                circle.Position = Vector2.new(screenPos.X, screenPos.Y)
+            end
+        end)
+
+        table.insert(indicators, {circle = circle, connection = updateConn})
+        task.delay(0.5, function()
+            circle:Remove()
+            updateConn:Disconnect()
+        end)
+    end
+
+    local function destroyParts(parts)
+        for _, part in ipairs(parts) do
+            if part and part.Remove then
+                part:Remove()
+            end
+        end
+        table.clear(parts)
+    end
+
+    local function interpolateColor(color1, color2, factor)
+        return Color3.new(
+            color1.R + (color2.R - color1.R) * factor,
+            color1.G + (color2.G - color1.G) * factor,
+            color1.B + (color2.B - color1.B) * factor
+        )
+    end
+
+    local function getTargetRootPart()
+        if cachedTargets and #cachedTargets > 0 then
+            return cachedTargets[1].part
+        end
+        return nil
+    end
+
+    local function createTargetESP()
+        local rootPart = getTargetRootPart()
+        if not rootPart then return end
+
+        destroyParts(targetESPQuads)
+        destroyParts(targetESPBlurQuads)
+        destroyParts(targetESPOppositeQuads)
+
+        local partsCount = Settings.TargetESP.PartsCount.Value
+        for i = 1, partsCount do
+            local quad = Drawing.new("Quad")
+            quad.Visible = false
+            quad.Thickness = (Settings.TargetESP.AnimateCircle.Value == "Orbit" or Settings.TargetESP.AnimateCircle.Value == "OrbitSwirl") and 1.5 or 1
+            quad.Filled = false
+            quad.Color = Settings.TargetESP.GradientEnabled.Value and
+                interpolateColor(Settings.TargetESP.Color1.Value, Settings.TargetESP.Color2.Value, i / partsCount) or
+                Settings.TargetESP.Color1.Value
+            table.insert(targetESPQuads, quad)
+
+            local oppositeQuad = Drawing.new("Quad")
+            oppositeQuad.Visible = false
+            oppositeQuad.Thickness = (Settings.TargetESP.AnimateCircle.Value == "Orbit" or Settings.TargetESP.AnimateCircle.Value == "OrbitSwirl") and 1.5 or 1
+            oppositeQuad.Filled = false
+            oppositeQuad.Color = quad.Color
+            table.insert(targetESPOppositeQuads, oppositeQuad)
+        end
+
+        if Settings.TargetESP.AnimateCircle.Value == "Orbit" or Settings.TargetESP.AnimateCircle.Value == "OrbitSwirl" then
+            for i = 1, partsCount do
+                local blurQuad = Drawing.new("Quad")
+                blurQuad.Visible = false
+                blurQuad.Thickness = 1.5
+                blurQuad.Filled = true
+                blurQuad.Color = targetESPQuads[i].Color
+                blurQuad.Transparency = 0.3
+                table.insert(targetESPBlurQuads, blurQuad)
+            end
+        end
+    end
+
+    local function updateTargetESP()
+        if not Settings.TargetESP.Enabled.Value then
+            destroyParts(targetESPQuads)
+            destroyParts(targetESPBlurQuads)
+            destroyParts(targetESPOppositeQuads)
+            if Settings.DebugLogs.Value then print("TargetESP disabled") end
+            return
+        end
+
+        local rootPart = getTargetRootPart()
+        if not rootPart then
+            destroyParts(targetESPQuads)
+            destroyParts(targetESPBlurQuads)
+            destroyParts(targetESPOppositeQuads)
+            lastTarget = nil
+            if Settings.DebugLogs.Value then print("No target for ESP") end
+            return
+        end
+
+        local currentTargetName = rootPart.Parent.Name
+        if currentTargetName ~= lastTarget then
+            lastTarget = currentTargetName
+            createTargetESP()
+            if Settings.DebugLogs.Value then print("TargetESP created for: " .. currentTargetName) end
+        end
+
+        local t = tick()
+        local yOffset
+        if Settings.TargetESP.AnimateCircle.Value == "Jello" then
+            yOffset = math.sin(t * Settings.TargetESP.AnimationSpeed.Value) * 2.75 - 0.25
+        elseif Settings.TargetESP.AnimateCircle.Value == "Orbit" then
+            yOffset = math.sin(t * Settings.TargetESP.AnimationSpeed.Value) * 0.5
+        else
+            yOffset = Settings.TargetESP.YOffset.Value
+        end
+
+        local center = Vector3.new(rootPart.Position.X, rootPart.Position.Y + yOffset, rootPart.Position.Z)
+        local screenCenter, onScreenCenter = Workspace.CurrentCamera:WorldToViewportPoint(center)
+        if not (onScreenCenter and screenCenter.Z > 0) then
+            for _, quad in ipairs(targetESPQuads) do
+                quad.Visible = false
+            end
+            for _, blurQuad in ipairs(targetESPBlurQuads) do
+                blurQuad.Visible = false
+            end
+            for _, oppositeQuad in ipairs(targetESPOppositeQuads) do
+                oppositeQuad.Visible = false
+            end
+            return
+        end
+
+        local espRadius = 1.7
+        local partsCount = #targetESPQuads
+        for i, quad in ipairs(targetESPQuads) do
+            local angleOffset
+            if Settings.TargetESP.AnimateCircle.Value == "Jello" then
+                angleOffset = math.sin(t * Settings.TargetESP.AnimationSpeed.Value) * 0.2
+            elseif Settings.TargetESP.AnimateCircle.Value == "OrbitSwirl" then
+                angleOffset = t * (Settings.TargetESP.AnimationSpeed.Value * 0.75)
+            else
+                angleOffset = 0
+            end
+
+            local angle1 = ((i - 1) / partsCount) * 2 * math.pi + angleOffset
+            local angle2 = (i / partsCount) * 2 * math.pi + angleOffset
+            local oppositeAngle1 = -angle1
+            local oppositeAngle2 = -angle2
+
+            local depthOffset = (Settings.TargetESP.AnimateCircle.Value == "Orbit" or Settings.TargetESP.AnimateCircle.Value == "OrbitSwirl") and
+                                (math.cos(t * Settings.TargetESP.AnimationSpeed.Value + (i / partsCount) * 2 * math.pi) * Settings.TargetESP.OrbitTilt.Value) or 0
+            local point1 = center + Vector3.new(math.cos(angle1) * espRadius, depthOffset, math.sin(angle1) * espRadius)
+            local point2 = center + Vector3.new(math.cos(angle2) * espRadius, depthOffset, math.sin(angle2) * espRadius)
+
+            local screenPoint1, onScreen1 = Workspace.CurrentCamera:WorldToViewportPoint(point1)
+            local screenPoint2, onScreen2 = Workspace.CurrentCamera:WorldToViewportPoint(point2)
+
+            if onScreen1 and onScreen2 and screenPoint1.Z > 0 and screenPoint2.Z > 0 then
+                if Settings.TargetESP.AnimateCircle.Value == "Orbit" or Settings.TargetESP.AnimateCircle.Value == "OrbitSwirl" then
+                    local point3 = center + Vector3.new(math.cos(angle1) * espRadius * 0.95, depthOffset, math.sin(angle1) * espRadius * 0.95)
+                    local point4 = center + Vector3.new(math.cos(angle2) * espRadius * 0.95, depthOffset, math.sin(angle2) * espRadius * 0.95)
+                    local screenPoint3, onScreen3 = Workspace.CurrentCamera:WorldToViewportPoint(point3)
+                    local screenPoint4, onScreen4 = Workspace.CurrentCamera:WorldToViewportPoint(point4)
+
+                    if onScreen3 and onScreen4 and screenPoint3.Z > 0 and screenPoint4.Z > 0 then
+                        quad.PointA = Vector2.new(screenPoint3.X, screenPoint3.Y)
+                        quad.PointB = Vector2.new(screenPoint4.X, screenPoint4.Y)
+                        quad.PointC = Vector2.new(screenPoint2.X, screenPoint2.Y)
+                        quad.PointD = Vector2.new(screenPoint1.X, screenPoint1.Y)
+                        quad.Visible = true
+                    else
+                        quad.Visible = false
+                    end
+                else
+                    quad.PointA = Vector2.new(screenPoint1.X, screenPoint1.Y)
+                    quad.PointB = Vector2.new(screenPoint2.X, screenPoint2.Y)
+                    quad.PointC = Vector2.new(screenPoint2.X, screenPoint2.Y)
+                    quad.PointD = Vector2.new(screenPoint1.X, screenPoint1.Y)
+                    quad.Visible = true
+                end
+
+                if Settings.TargetESP.GradientEnabled.Value then
+                    local factor = (math.sin(t * Settings.TargetESP.GradientSpeed.Value + (i / partsCount) * 2 * math.pi) + 1) / 2
+                    quad.Color = interpolateColor(Settings.TargetESP.Color1.Value, Settings.TargetESP.Color2.Value, factor)
+                else
+                    quad.Color = Settings.TargetESP.Color1.Value
+                end
+
+                local oppositeQuad = targetESPOppositeQuads[i]
+                local oppPoint1 = center + Vector3.new(math.cos(oppositeAngle1) * espRadius, -depthOffset, math.sin(oppositeAngle1) * espRadius)
+                local oppPoint2 = center + Vector3.new(math.cos(oppositeAngle2) * espRadius, -depthOffset, math.sin(oppositeAngle2) * espRadius)
+
+                local screenOppPoint1, onScreenOpp1 = Workspace.CurrentCamera:WorldToViewportPoint(oppPoint1)
+                local screenOppPoint2, onScreenOpp2 = Workspace.CurrentCamera:WorldToViewportPoint(oppPoint2)
+
+                if onScreenOpp1 and onScreenOpp2 and screenOppPoint1.Z > 0 and screenOppPoint2.Z > 0 then
+                    if Settings.TargetESP.AnimateCircle.Value == "Orbit" or Settings.TargetESP.AnimateCircle.Value == "OrbitSwirl" then
+                        local oppPoint3 = center + Vector3.new(math.cos(oppositeAngle1) * espRadius * 0.95, -depthOffset, math.sin(oppositeAngle1) * espRadius * 0.95)
+                        local oppPoint4 = center + Vector3.new(math.cos(oppositeAngle2) * espRadius * 0.95, -depthOffset, math.sin(oppositeAngle2) * espRadius * 0.95)
+                        local screenOppPoint3, onScreenOpp3 = Workspace.CurrentCamera:WorldToViewportPoint(oppPoint3)
+                        local screenOppPoint4, onScreenOpp4 = Workspace.CurrentCamera:WorldToViewportPoint(oppPoint4)
+
+                        if onScreenOpp3 and onScreenOpp4 and screenOppPoint3.Z > 0 and screenOppPoint4.Z > 0 then
+                            oppositeQuad.PointA = Vector2.new(screenOppPoint3.X, screenOppPoint3.Y)
+                            oppositeQuad.PointB = Vector2.new(screenOppPoint4.X, screenOppPoint4.Y)
+                            oppositeQuad.PointC = Vector2.new(screenOppPoint2.X, screenOppPoint2.Y)
+                            oppositeQuad.PointD = Vector2.new(screenOppPoint1.X, screenOppPoint1.Y)
+                            oppositeQuad.Visible = true
+                        else
+                            oppositeQuad.Visible = false
+                        end
+                    else
+                        oppositeQuad.PointA = Vector2.new(screenOppPoint1.X, screenOppPoint1.Y)
+                        oppositeQuad.PointB = Vector2.new(screenOppPoint2.X, screenOppPoint2.Y)
+                        oppositeQuad.PointC = Vector2.new(screenOppPoint2.X, screenOppPoint2.Y)
+                        oppositeQuad.PointD = Vector2.new(screenOppPoint1.X, screenOppPoint1.Y)
+                        oppositeQuad.Visible = true
+                    end
+                    oppositeQuad.Color = quad.Color
+                else
+                    oppositeQuad.Visible = false
+                end
+            else
+                quad.Visible = false
+                targetESPOppositeQuads[i].Visible = false
+            end
+        end
+
+        if Settings.TargetESP.AnimateCircle.Value == "Orbit" or Settings.TargetESP.AnimateCircle.Value == "OrbitSwirl" then
+            for i, blurQuad in ipairs(targetESPBlurQuads) do
+                local angle1 = ((i - 1) / partsCount) * 2 * math.pi + (Settings.TargetESP.AnimateCircle.Value == "OrbitSwirl" and (t * (Settings.TargetESP.AnimationSpeed.Value * 0.75)) or 0)
+                local angle2 = (i / partsCount) * 2 * math.pi + (Settings.TargetESP.AnimateCircle.Value == "OrbitSwirl" and (t * (Settings.TargetESP.AnimationSpeed.Value * 0.75)) or 0)
+                local blurOffset = 0.05
+                local blurCenter = Vector3.new(rootPart.Position.X, rootPart.Position.Y + yOffset - blurOffset, rootPart.Position.Z)
+                local blurPoint1 = blurCenter + Vector3.new(math.cos(angle1) * espRadius, depthOffset, math.sin(angle1) * espRadius)
+                local blurPoint2 = blurCenter + Vector3.new(math.cos(angle2) * espRadius, depthOffset, math.sin(angle2) * espRadius)
+                local blurPoint3 = blurCenter + Vector3.new(math.cos(angle1) * espRadius * 0.95, depthOffset, math.sin(angle1) * espRadius * 0.95)
+                local blurPoint4 = blurCenter + Vector3.new(math.cos(angle2) * espRadius * 0.95, depthOffset, math.sin(angle2) * espRadius * 0.95)
+
+                local screenBlurPoint1, onScreenBlur1 = Workspace.CurrentCamera:WorldToViewportPoint(blurPoint1)
+                local screenBlurPoint2, onScreenBlur2 = Workspace.CurrentCamera:WorldToViewportPoint(blurPoint2)
+                local screenBlurPoint3, onScreenBlur3 = Workspace.CurrentCamera:WorldToViewportPoint(blurPoint3)
+                local screenBlurPoint4, onScreenBlur4 = Workspace.CurrentCamera:WorldToViewportPoint(blurPoint4)
+
+                if onScreenBlur1 and onScreenBlur2 and onScreenBlur3 and onScreenBlur4 and screenBlurPoint1.Z > 0 and screenBlurPoint2.Z > 0 and screenBlurPoint3.Z > 0 and screenBlurPoint4.Z > 0 then
+                    blurQuad.PointA = Vector2.new(screenBlurPoint3.X, screenBlurPoint3.Y)
+                    blurQuad.PointB = Vector2.new(screenBlurPoint4.X, screenBlurPoint4.Y)
+                    blurQuad.PointC = Vector2.new(screenBlurPoint2.X, screenBlurPoint2.Y)
+                    blurQuad.PointD = Vector2.new(screenBlurPoint1.X, screenBlurPoint1.Y)
+                    blurQuad.Visible = true
+                    blurQuad.Color = targetESPQuads[i].Color
+                else
+                    blurQuad.Visible = false
+                end
+            end
+        end
+    end
+
+    -- RunService.RenderStepped для ESP
+    RunService.RenderStepped:Connect(function()
+        if Settings.TargetESP.Enabled.Value then
+            updateTargetESP()
+        end
+    end)
+
+    -- Загрузка CombatConfig
+    local CombatConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("Program"):WaitForChild("CombatConfig"))
+
+    -- Поиск таргетов
+    local function findAllTargets()
+        local startTime = tick()
+        local targets = {}
+        local modelsChecked = {}
+
+        local function checkModel(model)
+            if not model.Parent or table.find(ignoreFolders, model.Parent.Name) then return end
+            if model:IsA("Model") and model ~= Character and not Players:GetPlayerFromCharacter(model) and not modelsChecked[model] then
+                modelsChecked[model] = true
+                if #model.Name == 7 then return end
+                local humanoid = model:FindFirstChildOfClass("Humanoid")
+                if humanoid and humanoid.Health > 0 then
+                    local targetPart = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
+                    if targetPart then
+                        local dist = (HumanoidRootPart.Position - targetPart.Position).Magnitude
+                        if dist <= Settings.MaxDistance.Value then
+                            if Settings.UseRaycast.Value then
+                                local rayParams = RaycastParams.new()
+                                rayParams.FilterDescendantsInstances = {Character}
+                                rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+                                local result = Workspace:Raycast(HumanoidRootPart.Position, (targetPart.Position - HumanoidRootPart.Position).Unit * dist, rayParams)
+                                if result and result.Instance:IsDescendantOf(model) then
+                                    table.insert(targets, { model = model, part = targetPart, distance = dist })
+                                elseif Settings.DebugLogs.Value then
+                                    warn("Target " .. model.Name .. " skipped: part " .. targetPart.Name .. " not visible")
+                                end
+                            else
+                                table.insert(targets, { model = model, part = targetPart, distance = dist })
+                            end
+                        end
+                    elseif Settings.DebugLogs.Value then
+                        warn("No HumanoidRootPart/PrimaryPart in model: " .. model.Name)
+                    end
+                end
+            end
+        end
+
+        local overlapParams = OverlapParams.new()
+        overlapParams.FilterDescendantsInstances = {Character}
+        overlapParams.FilterType = Enum.RaycastFilterType.Blacklist
+        overlapParams.MaxParts = 1000
+        local parts = Workspace:GetPartBoundsInBox(CFrame.new(HumanoidRootPart.Position), Vector3.new(Settings.MaxDistance.Value * 2, Settings.MaxDistance.Value * 2, Settings.MaxDistance.Value * 2), overlapParams)
+        for _, part in ipairs(parts) do
+            local model = part:FindFirstAncestorOfClass("Model")
+            if model then
+                checkModel(model)
+            end
+        end
+
+        if #targets == 0 then
+            local taggedNPCs = CollectionService:GetTagged("NPC")
+            for _, model in ipairs(taggedNPCs) do
+                checkModel(model)
+            end
+        end
+
+        table.sort(targets, function(a, b) return a.distance < b.distance end)
+        if Settings.DebugLogs.Value then print("Targets found: " .. #targets .. " | Search time: " .. (tick() - startTime)) end
+        return targets
+    end
+
+    -- Получение оружия
+    local function getCurrentWeapon()
+        if tick() - lastWeaponCheck < 0.5 and currentWeaponCache then return unpack(currentWeaponCache) end
+        for _, tool in ipairs(Character:GetChildren()) do
+            if tool:IsA("Tool") then
+                local weaponType = tool:GetAttribute("Type") or "DuoSword"
+                currentWeaponCache = {tool, weaponType}
+                lastWeaponCheck = tick()
+                return tool, weaponType
+            end
+        end
+        return nil, nil
+    end
+
+    -- Средняя CFrame для кластера с предиктом
+    local function getAverageCFrame(cluster, heightOffset)
+        if #cluster == 0 then return nil end
+        local multiTargetPos = nil
+        if #cluster == 1 then
+            local targetPart = cluster[1].part
+            local basePos = targetPart.Position
+            if Settings.TestPredict.Value then
+                local predictOffset = targetPart.Velocity * Settings.PredictValue.Value
+                if Settings.DebugLogs.Value then
+                    print("Predict offset for " .. cluster[1].model.Name .. ": " .. tostring(predictOffset.Magnitude))
+                end
+                basePos = basePos + predictOffset
+            end
+            return CFrame.new(basePos) * CFrame.new(0, heightOffset, 0) * targetPart.CFrame.Rotation, nil
+        end
+
+        local totalPos = Vector3.new(0, 0, 0)
+        local count = 0
+        for _, target in ipairs(cluster) do
+            local pos = target.part.Position
+            if Settings.TestPredict.Value then
+                local predictOffset = target.part.Velocity * Settings.PredictValue.Value
+                if Settings.DebugLogs.Value then
+                    print("Predict offset for " .. target.model.Name .. ": " .. tostring(predictOffset.Magnitude))
+                end
+                pos = pos + predictOffset
+            end
+            totalPos = totalPos + pos
+            count = count + 1
+        end
+        local avgPos = totalPos / count
+        multiTargetPos = avgPos
+        local nearestCFrame = cluster[1].part.CFrame
+        return CFrame.new(avgPos) * CFrame.new(0, heightOffset, 0) * nearestCFrame.Rotation, multiTargetPos
+    end
+
+    -- Группировка таргетов
+    local function groupTargetsByProximity(targets, clusterRadius)
+        local clusters = {}
+        local used = {}
+        for i, target in ipairs(targets) do
+            if not used[i] then
+                local cluster = {target}
+                used[i] = true
+                for j, other in ipairs(targets) do
+                    if not used[j] and i ~= j then
+                        local dist = (target.part.Position - other.part.Position).Magnitude
+                        if dist <= clusterRadius then
+                            table.insert(cluster, other)
+                            used[j] = true
+                        end
+                    end
+                end
+                if #cluster >= 2 then
+                    table.insert(clusters, cluster)
+                end
+            end
+        end
+        if #clusters == 0 and #targets > 0 then
+            table.insert(clusters, {targets[1]})
+        end
+        return clusters
+    end
+
+    -- Основной цикл киллауры
+    local function runKillAura()
+        while Settings.Enabled.Value do
+            local interval = #cachedTargets > 0 and 0.5 or Settings.UpdateInterval.Value
+            if tick() - lastTargetUpdate >= interval or #cachedTargets == 0 then
+                cachedTargets = findAllTargets()
+                lastTargetUpdate = tick()
+            end
+            if #cachedTargets == 0 then 
+                if Settings.DebugLogs.Value then warn("No valid NPC targets!") end
+                task.wait(0.3)
+                continue 
+            end
+
+            local tool, weaponType = getCurrentWeapon()
+            if not tool or not weaponType then 
+                if Settings.DebugLogs.Value then warn("No weapon equipped!") end
+                task.wait(0.3)
+                continue 
+            end
+
+            if not slashCounter[weaponType] then
+                slashCounter[weaponType] = 1
+                hitNumCounter[weaponType] = 1
+            end
+
+            local weaponConfig = CombatConfig[weaponType] or CombatConfig
+            local slashLimit = weaponConfig.slashLimit or 1
+            local slashHit = weaponConfig.slashHit or 1
+
+            local clusters = Settings.EnableCluster.Value and groupTargetsByProximity(cachedTargets, Settings.ClusterRadius.Value) or {{cachedTargets[1]}}
+            for _, cluster in ipairs(clusters) do
+                local attackCFrame, multiTargetPos = getAverageCFrame(cluster, Settings.AttackHeight.Value)
+                if attackCFrame then
+                    createAttackIndicator(attackCFrame.Position)
+                    if multiTargetPos and #cluster >= 2 and Settings.EnableCluster.Value then
+                        createMultiTargetIndicator(multiTargetPos)
+                    end
+                    local args = {
+                        [1] = "Weapon_OnHit",
+                        [2] = invokeID,
+                        [3] = Workspace:GetServerTimeNow(),
+                        [4] = slashCounter[weaponType],
+                        [5] = weaponType,
+                        [6] = {
+                            ["hitNum"] = hitNumCounter[weaponType],
+                            ["onHitAnimName"] = weaponType .. slashCounter[weaponType],
+                            ["hrtCF"] = attackCFrame
+                        }
+                    }
+
+                    TNetSent:FireServer(unpack(args))
+                    invokeID = invokeID + 1
+                    if invokeID > 1853020188851841 then invokeID = 1 end
+                    break
+                end
+            end
+
+            hitNumCounter[weaponType] = hitNumCounter[weaponType] + 1
+            if hitNumCounter[weaponType] > slashHit then
+                hitNumCounter[weaponType] = 1
+                slashCounter[weaponType] = slashCounter[weaponType] + 1
+                if slashCounter[weaponType] > slashLimit then
+                    slashCounter[weaponType] = 1
+                end
+            end
+
+            Character:SetAttribute("AttackCooldown", false)
+            task.wait(0.01)
+        end
+    end
+
+    -- Запуск киллауры при включении
+    Settings.Enabled:GetPropertyChangedSignal("Value"):Connect(function()
+        if Settings.Enabled.Value then
+            task.spawn(runKillAura)
+        end
+    end)
+
+    -- UI настройки
+    
+    if UI.Tabs and UI.Tabs.Combat then
+        UI.Sections.KillAura = UI.Sections.KillAura or UI.Tabs.Combat:Section({ Name = "KillAura", Side = "Left" })
+        if UI.Sections and UI.Sections.KillAura then
+            UI.Sections.KillAura:Header({ Name = "Kill Aura" })
+            UI.Sections.KillAura:Toggle({
+                Name = "Enabled",
+                Default = Settings.Enabled.Default,
+                Callback = function(value)
+                    Settings.Enabled.Value = value
+                    notify("KillAura", "Kill Aura " .. (value and "Enabled" or "Disabled"), true)
+                end
+            }, 'EnabledKA')
+            UI.Sections.KillAura:Slider({
+                Name = "Max Distance",
+                Minimum = 10,
+                Maximum = 500,
+                Default = Settings.MaxDistance.Default,
+                Precision = 0,
+                Callback = function(value)
+                    Settings.MaxDistance.Value = value
+                    notify("KillAura", "Max Distance set to: " .. value)
+                end
+            }, 'MaxDistanceKA')
+            UI.Sections.KillAura:Toggle({
+                Name = "Enable Cluster",
+                Default = Settings.EnableCluster.Default,
+                Callback = function(value)
+                    Settings.EnableCluster.Value = value
+                    notify("KillAura", "Cluster " .. (value and "Enabled" or "Disabled"), true)
+                end
+            }, 'EnableClusterKA')
+            UI.Sections.KillAura:Slider({
+                Name = "Cluster Radius",
+                Minimum = 1,
+                Maximum = 10,
+                Default = Settings.ClusterRadius.Default,
+                Precision = 1,
+                Callback = function(value)
+                    Settings.ClusterRadius.Value = value
+                    notify("KillAura", "Cluster Radius set to: " .. value)
+                end
+            }, 'ClusterRadiusKA')
+            UI.Sections.KillAura:Slider({
+                Name = "Attack Height",
+                Minimum = -2,
+                Maximum = 2,
+                Default = Settings.AttackHeight.Default,
+                Precision = 1,
+                Callback = function(value)
+                    Settings.AttackHeight.Value = value
+                    notify("KillAura", "Attack Height set to: " .. value)
+                end
+            }, 'AttackHeightKA')
+            UI.Sections.KillAura:Toggle({
+                Name = "Use Raycast",
+                Default = Settings.UseRaycast.Default,
+                Callback = function(value)
+                    Settings.UseRaycast.Value = value
+                    notify("KillAura", "Raycast " .. (value and "Enabled" or "Disabled"), true)
+                end
+            }, 'UseRaycastKA')
+            UI.Sections.KillAura:Toggle({
+                Name = "Test Predict",
+                Default = Settings.TestPredict.Default,
+                Callback = function(value)
+                    Settings.TestPredict.Value = value
+                    notify("KillAura", "Predict " .. (value and "Enabled" or "Disabled"), true)
+                end
+            }, 'TestPredictKA')
+            UI.Sections.KillAura:Slider({
+                Name = "Predict Value",
+                Minimum = 0.01,
+                Maximum = 1,
+                Default = Settings.PredictValue.Default,
+                Precision = 2,
+                Callback = function(value)
+                    Settings.PredictValue.Value = value
+                    notify("KillAura", "Predict Value set to: " .. value)
+                end
+            }, 'PredictValueKA')
+            UI.Sections.KillAura:Slider({
+                Name = "Update Interval",
+                Minimum = 0.01,
+                Maximum = 1,
+                Default = Settings.UpdateInterval.Default,
+                Precision = 2,
+                Callback = function(value)
+                    Settings.UpdateInterval.Value = value
+                    notify("KillAura", "Update Interval set to: " .. value)
+                end
+            }, 'UpdateIntervalKA')
+            UI.Sections.KillAura:Toggle({
+                Name = "Debug Logs",
+                Default = Settings.DebugLogs.Default,
+                Callback = function(value)
+                    Settings.DebugLogs.Value = value
+                    notify("KillAura", "Debug Logs " .. (value and "Enabled" or "Disabled"), true)
+                end
+            }, 'DebugLogsKA')
+            UI.Sections.KillAura:Header({ Name = "Target ESP Settings" })
+            UI.Sections.KillAura:Toggle({
+                Name = "ESP Enabled",
+                Default = Settings.TargetESP.Enabled.Default,
+                Callback = function(value)
+                    Settings.TargetESP.Enabled.Value = value
+                    notify("TargetESP", "ESP " .. (value and "Enabled" or "Disabled"), true)
+                end
+            }, 'EnabledESPKA')
+            UI.Sections.KillAura:Slider({
+                Name = "Parts Count",
+                Minimum = 10,
+                Maximum = 50,
+                Default = Settings.TargetESP.PartsCount.Default,
+                Precision = 0,
+                Callback = function(value)
+                    Settings.TargetESP.PartsCount.Value = value
+                    task.defer(createTargetESP)
+                    notify("TargetESP", "Parts Count set to: " .. value)
+                end
+            }, 'PartsCountESPKA')
+            UI.Sections.KillAura:Slider({
+                Name = "Gradient Speed",
+                Minimum = 0.1,
+                Maximum = 5,
+                Default = Settings.TargetESP.GradientSpeed.Default,
+                Precision = 1,
+                Callback = function(value)
+                    Settings.TargetESP.GradientSpeed.Value = value
+                    notify("TargetESP", "Gradient Speed set to: " .. value)
+                end
+            }, 'GradientSpeedESPKA')
+            UI.Sections.KillAura:Toggle({
+                Name = "Gradient Enabled",
+                Default = Settings.TargetESP.GradientEnabled.Default,
+                Callback = function(value)
+                    Settings.TargetESP.GradientEnabled.Value = value
+                    task.defer(createTargetESP)
+                    notify("TargetESP", "Gradient " .. (value and "Enabled" or "Disabled"), true)
+                end
+            }, 'GradientEnabledESPKA')
+            UI.Sections.KillAura:Colorpicker({
+                Name = "ESP Color 1",
+                Default = Settings.TargetESP.Color1.Default,
+                Callback = function(value)
+                    Settings.TargetESP.Color1.Value = value
+                    task.defer(createTargetESP)
+                    notify("TargetESP", "Color 1 set to: R=" .. math.floor(value.R * 255) .. ", G=" .. math.floor(value.G * 255) .. ", B=" .. math.floor(value.B * 255))
+                end
+            }, 'Color1ESPKA')
+            UI.Sections.KillAura:Colorpicker({
+                Name = "ESP Color 2",
+                Default = Settings.TargetESP.Color2.Default,
+                Callback = function(value)
+                    Settings.TargetESP.Color2.Value = value
+                    task.defer(createTargetESP)
+                    notify("TargetESP", "Color 2 set to: R=" .. math.floor(value.R * 255) .. ", G=" .. math.floor(value.G * 255) .. ", B=" .. math.floor(value.B * 255))
+                end
+            }, 'Color2ESPKA')
+            UI.Sections.KillAura:Slider({
+                Name = "Y Offset",
+                Minimum = -5,
+                Maximum = 5,
+                Default = Settings.TargetESP.YOffset.Default,
+                Precision = 1,
+                Callback = function(value)
+                    Settings.TargetESP.YOffset.Value = value
+                    notify("TargetESP", "Y Offset set to: " .. value)
+                end
+            }, 'YOffsetESPKA')
+            UI.Sections.KillAura:Dropdown({
+                Name = "Animate Circle",
+                Options = {"None", "Jello", "Orbit", "OrbitSwirl"},
+                Default = Settings.TargetESP.AnimateCircle.Default,
+                Callback = function(value)
+                    Settings.TargetESP.AnimateCircle.Value = value
+                    task.defer(createTargetESP)
+                    notify("TargetESP", "Animation set to: " .. value, true)
+                end
+            }, 'AnimateCircleESPKA')
+            UI.Sections.KillAura:Slider({
+                Name = "Animation Speed",
+                Minimum = 0.1,
+                Maximum = 5,
+                Default = Settings.TargetESP.AnimationSpeed.Default,
+                Precision = 1,
+                Callback = function(value)
+                    Settings.TargetESP.AnimationSpeed.Value = value
+                    notify("TargetESP", "Animation Speed set to: " .. value)
+                end
+            }, 'AnimationSpeedESPKA')
+            UI.Sections.KillAura:Slider({
+                Name = "Orbit Tilt",
+                Minimum = 0,
+                Maximum = 2,
+                Default = Settings.TargetESP.OrbitTilt.Default,
+                Precision = 1,
+                Callback = function(value)
+                    Settings.TargetESP.OrbitTilt.Value = value
+                    notify("TargetESP", "Orbit Tilt set to: " .. value)
+                end
+            }, 'OrbitTiltESPKA')
+        end
+    end
+
+    return KillAura
+end
+
+return KillAura
