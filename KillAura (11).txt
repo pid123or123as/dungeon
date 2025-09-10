@@ -1,5 +1,5 @@
 local KillAura = {}
-
+print('2')
 function KillAura.Init(UI, Core, notify)
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local CollectionService = game:GetService("CollectionService")
@@ -580,9 +580,8 @@ function KillAura.Init(UI, Core, notify)
     end)
 
     -- UI настройки
-    
+    UI.Sections.KillAura = UI.Sections.KillAura or UI.Tabs.Combat:Section({ Name = "KillAura", Side = "Left" })
     if UI.Tabs and UI.Tabs.Combat then
-        UI.Sections.KillAura = UI.Sections.KillAura or UI.Tabs.Combat:Section({ Name = "KillAura", Side = "Left" })
         if UI.Sections and UI.Sections.KillAura then
             UI.Sections.KillAura:Header({ Name = "Kill Aura" })
             UI.Sections.KillAura:Toggle({
