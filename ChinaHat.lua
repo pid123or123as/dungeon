@@ -4,6 +4,7 @@ function ChinaHat.Init(UI, Core, notify)
     local Players = Core.Services.Players
     local RunService = Core.Services.RunService
     local Workspace = Core.Services.Workspace
+    local UserInputService = Core.Services.UserInputService
     local camera = Workspace.CurrentCamera
 
     local LocalPlayer = Core.PlayerData.LocalPlayer
@@ -68,11 +69,20 @@ function ChinaHat.Init(UI, Core, notify)
         )
     end
 
+    local function getShiftLockOffset()
+        if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+            local humanoid = localCharacter and localCharacter:FindFirstChild("Humanoid")
+            if humanoid and humanoid.AutoRotate then
+                return Vector3.new(1.5, 0, 0) -- Adjust for typical Shift Lock offset
+            end
+        end
+        return Vector3.new(0, 0, 0)
+    end
+
     local function createHat()
-        if not localCharacter or not localCharacter:FindFirstChild("Head") then return end
+        if not localCharacter or not localCharacter:FindFirstChild("HumanoidRootPart") then return end
         destroyParts(hatLines)
         destroyParts(hatCircleQuads)
-        local head = localCharacter.Head
         for i = 1, State.ChinaHat.HatParts.Value do
             local line = Drawing.new("Line")
             line.Visible = false
@@ -128,23 +138,24 @@ function ChinaHat.Init(UI, Core, notify)
     end
 
     local function updateHat()
-        if not State.ChinaHat.HatActive.Value or not localCharacter or not localCharacter:FindFirstChild("Head") then
+        if not State.ChinaHat.HatActive.Value or not localCharacter or not localCharacter:FindFirstChild("HumanoidRootPart") then
             destroyParts(hatLines)
             destroyParts(hatCircleQuads)
             return
         end
-        local head = localCharacter.Head
-        local y = head.Position.Y + State.ChinaHat.HatYOffset.Value
+        local rootPart = localCharacter.HumanoidRootPart
+        local shiftLockOffset = getShiftLockOffset()
         local t = tick()
         local hatHeight = 2.15 * State.ChinaHat.HatScale.Value
         local hatRadius = 1.95 * State.ChinaHat.HatScale.Value
+        local y = rootPart.Position.Y + State.ChinaHat.HatYOffset.Value + 2.5 -- Adjust for head height
 
         for i, line in ipairs(hatLines) do
             local angle = (i / State.ChinaHat.HatParts.Value) * 2 * math.pi
             local x = math.cos(angle) * hatRadius
             local z = math.sin(angle) * hatRadius
-            local basePosition = Vector3.new(head.Position.X, y, head.Position.Z)
-            local topPosition = Vector3.new(head.Position.X + x, y - hatHeight / 3, head.Position.Z + z)
+            local basePosition = rootPart.Position + shiftLockOffset + Vector3.new(0, State.ChinaHat.HatYOffset.Value + 2.5, 0)
+            local topPosition = basePosition + Vector3.new(x, -hatHeight / 3, z)
             local offset = 0.03
             local direction = (topPosition - basePosition).Unit
             local endPoint = topPosition + direction * offset
@@ -173,9 +184,9 @@ function ChinaHat.Init(UI, Core, notify)
             for i, line in ipairs(hatLines) do
                 if line.Visible then
                     local angle = (i / State.ChinaHat.HatParts.Value) * 2 * math.pi
-                    x = math.cos(angle) * hatRadius
-                    z = math.sin(angle) * hatRadius
-                    local topPosition = Vector3.new(head.Position.X + x, y - hatHeight / 3, head.Position.Z + z)
+                    local x = math.cos(angle) * hatRadius
+                    local z = math.sin(angle) * hatRadius
+                    local topPosition = rootPart.Position + shiftLockOffset + Vector3.new(x, State.ChinaHat.HatYOffset.Value + 2.5 - hatHeight / 3, z)
                     topCenter = topCenter + topPosition
                     visibleEnds = visibleEnds + 1
                 end
@@ -183,7 +194,7 @@ function ChinaHat.Init(UI, Core, notify)
             if visibleEnds > 0 then
                 topCenter = topCenter / visibleEnds
             else
-                topCenter = Vector3.new(head.Position.X, y - hatHeight / 3, head.Position.Z)
+                topCenter = rootPart.Position + shiftLockOffset + Vector3.new(0, State.ChinaHat.HatYOffset.Value + 2.5 - hatHeight / 3, 0)
             end
 
             local screenCenter, onScreenCenter = camera:WorldToViewportPoint(topCenter)
@@ -227,8 +238,9 @@ function ChinaHat.Init(UI, Core, notify)
             return
         end
         local rootPart = localCharacter.HumanoidRootPart
+        local shiftLockOffset = getShiftLockOffset()
         local t = tick()
-        local center = Vector3.new(rootPart.Position.X, rootPart.Position.Y + State.Circle.CircleYOffset.Value, rootPart.Position.Z)
+        local center = rootPart.Position + shiftLockOffset + Vector3.new(0, State.Circle.CircleYOffset.Value, 0)
         local screenCenter, onScreenCenter = camera:WorldToViewportPoint(center)
         if not (onScreenCenter and screenCenter.Z > 0) then
             for _, quad in ipairs(circleQuads) do
@@ -271,8 +283,9 @@ function ChinaHat.Init(UI, Core, notify)
             return
         end
         local rootPart = localCharacter.HumanoidRootPart
+        local shiftLockOffset = getShiftLockOffset()
         local t = tick()
-        local center = Vector3.new(rootPart.Position.X, rootPart.Position.Y + State.Nimb.NimbYOffset.Value, rootPart.Position.Z)
+        local center = rootPart.Position + shiftLockOffset + Vector3.new(0, State.Nimb.NimbYOffset.Value, 0)
         local screenCenter, onScreenCenter = camera:WorldToViewportPoint(center)
         if not (onScreenCenter and screenCenter.Z > 0) then
             for _, quad in ipairs(nimbQuads) do
@@ -597,7 +610,7 @@ function ChinaHat.Init(UI, Core, notify)
             end,
         }, 'JumpAnimate')
 
-        local nimbSection = UI.Sections.Nimb or UI.Tabs.Visuals:Section({ Name = "Nimb", Side = "Left" })
+        local nimbSection = UI.Sections.Nimb or UI.Tabs.Visuals:Section({ Name = "Nimb", Side = "Right" })
         UI.Sections.Nimb = nimbSection
         nimbSection:Header({ Name = "Nimb" })
         nimbSection:SubLabel({ Text = "Displays a circle above the player head" })
@@ -684,12 +697,11 @@ function ChinaHat.Init(UI, Core, notify)
             end,
         }, 'NimbYOffset')
 
-        local configSection = UI.Tabs.Config:Section({ Name = "Circle,ChinaHat,Nimb Sync", Side = "Right" })
+        local configSection = UI.Tabs.Config:Section({ Name = "Circle,ChinaHat,Nimb Sync", Side = "Left" })
         configSection:Header({ Name = "ChinaHat, Circle, Nimb Settings Sync" })
         configSection:Button({
             Name = "Sync Config",
             Callback = function()
-                -- Синхронизация ChinaHat
                 State.ChinaHat.HatScale.Value = uiElements.HatScale:GetValue()
                 State.ChinaHat.HatParts.Value = uiElements.HatParts:GetValue()
                 State.ChinaHat.HatGradientSpeed.Value = uiElements.HatGradientSpeed:GetValue()
@@ -698,7 +710,6 @@ function ChinaHat.Init(UI, Core, notify)
                     createHat()
                 end
 
-                -- Синхронизация Circle
                 State.Circle.CircleRadius.Value = uiElements.CircleRadius:GetValue()
                 State.Circle.CircleParts.Value = uiElements.CircleParts:GetValue()
                 State.Circle.CircleGradientSpeed.Value = uiElements.CircleGradientSpeed:GetValue()
@@ -706,7 +717,6 @@ function ChinaHat.Init(UI, Core, notify)
                     createCircle()
                 end
 
-                -- Синхронизация Nimb
                 State.Nimb.NimbRadius.Value = uiElements.NimbRadius:GetValue()
                 State.Nimb.NimbParts.Value = uiElements.NimbParts:GetValue()
                 State.Nimb.NimbGradientSpeed.Value = uiElements.NimbGradientSpeed:GetValue()
@@ -737,6 +747,3 @@ function ChinaHat.Init(UI, Core, notify)
 end
 
 return ChinaHat
-
-
-
