@@ -1,5 +1,5 @@
 local KillAura = {}
-
+print('1')
 function KillAura.Init(UI, Core, notify)
     local ReplicatedStorage = Core.Services.ReplicatedStorage
     local CollectionService = game:GetService("CollectionService")
@@ -651,7 +651,7 @@ function KillAura.Init(UI, Core, notify)
                 end
                 notify("KillAura", "Kill Aura " .. (value and "Enabled" or "Disabled"), true)
             end
-        }, 'EnabledKA')
+        }, 'EnabledKA_Toggle')
         KillAuraSection:Divider()
         uiElements.ShowCirclesKA = KillAuraSection:Toggle({
             Name = "Show Circles",
@@ -671,7 +671,7 @@ function KillAura.Init(UI, Core, notify)
                 end
                 notify("KillAura", "Circles " .. (value and "Enabled" or "Disabled"), true)
             end
-        }, 'ShowCirclesKA')
+        }, 'ShowCirclesKA_Toggle')
         uiElements.MaxDistanceKA = KillAuraSection:Slider({
             Name = "Max Distance",
             Minimum = 10,
@@ -684,7 +684,7 @@ function KillAura.Init(UI, Core, notify)
                 cachedTargets = findAllTargets()
                 lastTargetUpdate = tick()
             end
-        }, 'MaxDistanceKA')
+        }, 'MaxDistanceKA_Slider')
         uiElements.EnableClusterKA = KillAuraSection:Toggle({
             Name = "Enable Cluster",
             Default = Settings.EnableCluster.Default,
@@ -692,7 +692,7 @@ function KillAura.Init(UI, Core, notify)
                 Settings.EnableCluster.Value = value
                 notify("KillAura", "Cluster " .. (value and "Enabled" or "Disabled"), true)
             end
-        }, 'EnableClusterKA')
+        }, 'EnableClusterKA_Toggle')
         uiElements.ClusterRadiusKA = KillAuraSection:Slider({
             Name = "Cluster Radius",
             Minimum = 1,
@@ -703,7 +703,7 @@ function KillAura.Init(UI, Core, notify)
                 Settings.ClusterRadius.Value = value
                 notify("KillAura", "Cluster Radius set to: " .. value)
             end
-        }, 'ClusterRadiusKA')
+        }, 'ClusterRadiusKA_Slider')
         uiElements.AttackHeightKA = KillAuraSection:Slider({
             Name = "Attack Height",
             Minimum = -2,
@@ -714,7 +714,7 @@ function KillAura.Init(UI, Core, notify)
                 Settings.AttackHeight.Value = value
                 notify("KillAura", "Attack Height set to: " .. value)
             end
-        }, 'AttackHeightKA')
+        }, 'AttackHeightKA_Slider')
         KillAuraSection:Divider()
         uiElements.UseRaycastKA = KillAuraSection:Toggle({
             Name = "Use Raycast",
@@ -723,7 +723,7 @@ function KillAura.Init(UI, Core, notify)
                 Settings.UseRaycast.Value = value
                 notify("KillAura", "Raycast " .. (value and "Enabled" or "Disabled"), true)
             end
-        }, 'UseRaycastKA')
+        }, 'UseRaycastKA_Toggle')
         uiElements.TestPredictKA = KillAuraSection:Toggle({
             Name = "Test Predict",
             Default = Settings.TestPredict.Default,
@@ -731,7 +731,7 @@ function KillAura.Init(UI, Core, notify)
                 Settings.TestPredict.Value = value
                 notify("KillAura", "Predict " .. (value and "Enabled" or "Disabled"), true)
             end
-        }, 'TestPredictKA')
+        }, 'TestPredictKA_Toggle')
         uiElements.PredictValueKA = KillAuraSection:Slider({
             Name = "Predict Value",
             Minimum = 0.01,
@@ -742,7 +742,7 @@ function KillAura.Init(UI, Core, notify)
                 Settings.PredictValue.Value = value
                 notify("KillAura", "Predict Value set to: " .. value)
             end
-        }, 'PredictValueKA')
+        }, 'PredictValueKA_Slider')
         uiElements.UpdateIntervalKA = KillAuraSection:Slider({
             Name = "Update Interval",
             Minimum = 0.01,
@@ -753,7 +753,7 @@ function KillAura.Init(UI, Core, notify)
                 Settings.UpdateInterval.Value = value
                 notify("KillAura", "Update Interval set to: " .. value)
             end
-        }, 'UpdateIntervalKA')
+        }, 'UpdateIntervalKA_Slider')
         KillAuraSection:Divider()
         uiElements.DebugLogsKA = KillAuraSection:Toggle({
             Name = "Debug Logs",
@@ -762,7 +762,7 @@ function KillAura.Init(UI, Core, notify)
                 Settings.DebugLogs.Value = value
                 notify("KillAura", "Debug Logs " .. (value and "Enabled" or "Disabled"), true)
             end
-        }, 'DebugLogsKA')
+        }, 'DebugLogsKA_Toggle')
 
         local TargetESP = UI.Sections.TargetESP
         TargetESP:Header({ Name = "Target ESP" })
@@ -776,7 +776,7 @@ function KillAura.Init(UI, Core, notify)
                 end
                 notify("TargetESP", "ESP " .. (value and "Enabled" or "Disabled"), true)
             end
-        }, 'EnabledESPKA')
+        }, 'EnabledESPKA_Toggle')
         uiElements.PartsCountESPKA = TargetESP:Slider({
             Name = "Parts Count",
             Minimum = 10,
@@ -788,7 +788,7 @@ function KillAura.Init(UI, Core, notify)
                 task.defer(createTargetESP)
                 notify("TargetESP", "Parts Count set to: " .. value)
             end
-        }, 'PartsCountESPKA')
+        }, 'PartsCountESPKA_Slider')
         uiElements.GradientSpeedESPKA = TargetESP:Slider({
             Name = "Gradient Speed",
             Minimum = 0.1,
@@ -799,7 +799,7 @@ function KillAura.Init(UI, Core, notify)
                 Settings.TargetESP.GradientSpeed.Value = value
                 notify("TargetESP", "Gradient Speed set to: " .. value)
             end
-        }, 'GradientSpeedESPKA')
+        }, 'GradientSpeedESPKA_Slider')
         uiElements.CircleDistanceESPKA = TargetESP:Slider({
             Name = "Circle Distance",
             Minimum = 0.5,
@@ -810,7 +810,7 @@ function KillAura.Init(UI, Core, notify)
                 Settings.TargetESP.CircleDistance.Value = value
                 notify("TargetESP", "Circle Distance set to: " .. value)
             end
-        }, 'CircleDistanceESPKA')
+        }, 'CircleDistanceESPKA_Slider')
         TargetESP:Divider()
         uiElements.YOffsetESPKA = TargetESP:Slider({
             Name = "Y Offset",
@@ -822,7 +822,7 @@ function KillAura.Init(UI, Core, notify)
                 Settings.TargetESP.YOffset.Value = value
                 notify("TargetESP", "Y Offset set to: " .. value)
             end
-        }, 'YOffsetESPKA')
+        }, 'YOffsetESPKA_Slider')
         uiElements.AnimateCircleESPKA = TargetESP:Dropdown({
             Name = "Animate Circle",
             Options = {"None", "Jello", "Orbit", "OrbitSwirl"},
@@ -832,7 +832,7 @@ function KillAura.Init(UI, Core, notify)
                 task.defer(createTargetESP)
                 notify("TargetESP", "Animation set to: " .. value, true)
             end
-        }, 'AnimateCircleESPKA')
+        }, 'AnimateCircleESPKA_Dropdown')
         uiElements.AnimationSpeedESPKA = TargetESP:Slider({
             Name = "Animation Speed",
             Minimum = 0.1,
@@ -843,7 +843,7 @@ function KillAura.Init(UI, Core, notify)
                 Settings.TargetESP.AnimationSpeed.Value = value
                 notify("TargetESP", "Animation Speed set to: " .. value)
             end
-        }, 'AnimationSpeedESPKA')
+        }, 'AnimationSpeedESPKA_Slider')
         TargetESP:Divider()
         uiElements.OrbitTiltESPKA = TargetESP:Slider({
             Name = "Orbit Tilt",
@@ -855,12 +855,10 @@ function KillAura.Init(UI, Core, notify)
                 Settings.TargetESP.OrbitTilt.Value = value
                 notify("TargetESP", "Orbit Tilt set to: " .. value)
             end
-        }, 'OrbitTiltESPKA')
-    end
-        ConfigSync = UI.Tabs.Config:Section({ Name = "KillAura sync", Side = "Right" })
-        ConfigSync:Header({ Name = "KillAura Settings Sync" })
-        ConfigSync:Button({
-            Name = "Sync Config",
+        }, 'OrbitTiltESPKA_Slider')
+
+        UI.Tabs.Config:Button({
+            Name = "Sync KillAura Config",
             Callback = function()
                 Settings.MaxDistance.Value = uiElements.MaxDistanceKA:GetValue()
                 Settings.ClusterRadius.Value = uiElements.ClusterRadiusKA:GetValue()
@@ -868,17 +866,35 @@ function KillAura.Init(UI, Core, notify)
                 Settings.PredictValue.Value = uiElements.PredictValueKA:GetValue()
                 Settings.UpdateInterval.Value = uiElements.UpdateIntervalKA:GetValue()
                 Settings.ShowCircles.Value = uiElements.ShowCirclesKA:GetState()
-                -- Sync TargetESP sliders
                 Settings.TargetESP.PartsCount.Value = uiElements.PartsCountESPKA:GetValue()
                 Settings.TargetESP.GradientSpeed.Value = uiElements.GradientSpeedESPKA:GetValue()
                 Settings.TargetESP.CircleDistance.Value = uiElements.CircleDistanceESPKA:GetValue()
                 Settings.TargetESP.YOffset.Value = uiElements.YOffsetESPKA:GetValue()
                 Settings.TargetESP.AnimationSpeed.Value = uiElements.AnimationSpeedESPKA:GetValue()
                 Settings.TargetESP.OrbitTilt.Value = uiElements.OrbitTiltESPKA:GetValue()
+                Settings.TargetESP.AnimateCircle.Value = uiElements.AnimateCircleESPKA:GetValue()
+
+                if Settings.DebugLogs.Value then
+                    print("Synced MaxDistance: " .. Settings.MaxDistance.Value)
+                    print("Synced ClusterRadius: " .. Settings.ClusterRadius.Value)
+                    print("Synced AttackHeight: " .. Settings.AttackHeight.Value)
+                    print("Synced PredictValue: " .. Settings.PredictValue.Value)
+                    print("Synced UpdateInterval: " .. Settings.UpdateInterval.Value)
+                    print("Synced ShowCircles: " .. tostring(Settings.ShowCircles.Value))
+                    print("Synced PartsCountESP: " .. Settings.TargetESP.PartsCount.Value)
+                    print("Synced GradientSpeedESP: " .. Settings.TargetESP.GradientSpeed.Value)
+                    print("Synced CircleDistanceESP: " .. Settings.TargetESP.CircleDistance.Value)
+                    print("Synced YOffsetESP: " .. Settings.TargetESP.YOffset.Value)
+                    print("Synced AnimationSpeedESP: " .. Settings.TargetESP.AnimationSpeed.Value)
+                    print("Synced OrbitTiltESP: " .. Settings.TargetESP.OrbitTilt.Value)
+                    print("Synced AnimateCircleESP: " .. Settings.TargetESP.AnimateCircle.Value)
+                end
 
                 notify("KillAura", "Sliders synchronized!", true)
             end
         })
+    end
+
     return KillAura
 end
 
