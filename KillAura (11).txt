@@ -858,7 +858,7 @@ function KillAura.Init(UI, Core, notify)
         }, 'OrbitTiltESPKA_Slider')
         local configSection = UI.Tabs.Config:Section({ Name = "KillAura sync", Side = "Right" })
         configSection:Header({ Name = "KillAura Settings Sync" })
-        configsection:Button({
+        configSection:Button({
             Name = "Sync KillAura Config",
             Callback = function()
                 Settings.MaxDistance.Value = uiElements.MaxDistanceKA:GetValue()
