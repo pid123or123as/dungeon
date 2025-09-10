@@ -867,7 +867,7 @@ function KillAura.Init(UI, Core, notify)
                 Settings.AttackHeight.Value = uiElements.AttackHeightKA:GetValue()
                 Settings.PredictValue.Value = uiElements.PredictValueKA:GetValue()
                 Settings.UpdateInterval.Value = uiElements.UpdateIntervalKA:GetValue()
-
+                Settings.ShowCircles.Value = uiElements.ShowCirclesKA:GetState()
                 -- Sync TargetESP sliders
                 Settings.TargetESP.PartsCount.Value = uiElements.PartsCountESPKA:GetValue()
                 Settings.TargetESP.GradientSpeed.Value = uiElements.GradientSpeedESPKA:GetValue()
@@ -875,9 +875,6 @@ function KillAura.Init(UI, Core, notify)
                 Settings.TargetESP.YOffset.Value = uiElements.YOffsetESPKA:GetValue()
                 Settings.TargetESP.AnimationSpeed.Value = uiElements.AnimationSpeedESPKA:GetValue()
                 Settings.TargetESP.OrbitTilt.Value = uiElements.OrbitTiltESPKA:GetValue()
-                cachedTargets = findAllTargets()
-                lastTargetUpdate = tick()
-                task.defer(createTargetESP)
 
                 notify("KillAura", "Sliders synchronized!", true)
             end
