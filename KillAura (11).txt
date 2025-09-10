@@ -386,7 +386,7 @@ function KillAura.Init(UI, Core, notify)
                 local humanoid = model:FindFirstChildOfClass("Humanoid")
                 if humanoid and humanoid.Health > 0 then
                     local targetPart = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
-                    if targetPart then
+                    if targetPart and targetPart:IsA("BasePart") then
                         local dist = (HumanoidRootPart.Position - targetPart.Position).Magnitude
                         if dist <= Settings.MaxDistance.Value then
                             if Settings.UseRaycast.Value then
@@ -397,14 +397,14 @@ function KillAura.Init(UI, Core, notify)
                                 if result and result.Instance:IsDescendantOf(model) then
                                     table.insert(targets, { model = model, part = targetPart, distance = dist })
                                 elseif Settings.DebugLogs.Value then
-                                    warn("Target " .. model.Name .. " skipped: part " .. targetPart.Name .. " not visible")
+                                    warn("Target " .. model.Name .. " skipped: part " .. (targetPart and targetPart.Name or "nil") .. " not visible")
                                 end
                             else
                                 table.insert(targets, { model = model, part = targetPart, distance = dist })
                             end
                         end
                     elseif Settings.DebugLogs.Value then
-                        warn("No HumanoidRootPart/PrimaryPart in model: " .. model.Name)
+                        warn("No valid HumanoidRootPart/PrimaryPart in model: " .. model.Name)
                     end
                 end
             end
@@ -458,11 +458,20 @@ function KillAura.Init(UI, Core, notify)
         local multiTargetPos = nil
         if #cluster == 1 then
             local targetPart = cluster[1].part
+            if not targetPart or not targetPart:IsA("BasePart") then
+                if Settings.DebugLogs.Value then
+                    warn("Single target has no valid part: " .. cluster[1].model.Name)
+                end
+                return nil
+            end
             local basePos = targetPart.Position
             if Settings.TestPredict.Value then
-                local predictOffset = targetPart.Velocity * Settings.PredictValue.Value
-                if Settings.DebugLogs.Value then
-                    print("Predict offset for " .. cluster[1].model.Name .. ": " .. tostring(predictOffset.Magnitude))
+                local predictOffset = Vector3.new(0, 0, 0)
+                if targetPart and targetPart.Velocity then
+                    predictOffset = targetPart.Velocity * Settings.PredictValue.Value
+                    if Settings.DebugLogs.Value then
+                        print("Predict offset for " .. cluster[1].model.Name .. ": " .. tostring(predictOffset.Magnitude))
+                    end
                 end
                 basePos = basePos + predictOffset
             end
@@ -471,22 +480,41 @@ function KillAura.Init(UI, Core, notify)
 
         local totalPos = Vector3.new(0, 0, 0)
         local count = 0
+        local nearestCFrame = nil
         for _, target in ipairs(cluster) do
-            local pos = target.part.Position
-            if Settings.TestPredict.Value then
-                local predictOffset = targetPart.Velocity * Settings.PredictValue.Value
+            local targetPart = target.part
+            if not targetPart or not targetPart:IsA("BasePart") then
                 if Settings.DebugLogs.Value then
-                    print("Predict offset for " .. target.model.Name .. ": " .. tostring(predictOffset.Magnitude))
+                    warn("Cluster target has no valid part: " .. target.model.Name)
+                end
+                continue
+            end
+            local pos = targetPart.Position
+            if Settings.TestPredict.Value then
+                local predictOffset = Vector3.new(0, 0, 0)
+                if targetPart.Velocity then
+                    predictOffset = targetPart.Velocity * Settings.PredictValue.Value
+                    if Settings.DebugLogs.Value then
+                        print("Predict offset for " .. target.model.Name .. ": " .. tostring(predictOffset.Magnitude))
+                    end
                 end
                 pos = pos + predictOffset
             end
             totalPos = totalPos + pos
             count = count + 1
+            if not nearestCFrame then
+                nearestCFrame = targetPart.CFrame
+            end
+        end
+        if count == 0 then
+            if Settings.DebugLogs.Value then
+                warn("No valid parts in cluster")
+            end
+            return nil
         end
         local avgPos = totalPos / count
         multiTargetPos = avgPos
-        local nearestCFrame = cluster[1].part.CFrame
-        return CFrame.new(avgPos) * CFrame.new(0, heightOffset, 0) * nearestCFrame.Rotation, multiTargetPos
+        return CFrame.new(avgPos) * CFrame.new(0, heightOffset, 0) * (nearestCFrame or CFrame.new()), multiTargetPos
     end
 
     -- Group targets by proximity
@@ -527,7 +555,7 @@ function KillAura.Init(UI, Core, notify)
                 lastTargetUpdate = tick()
             end
             if #cachedTargets == 0 then 
-                Core.DungeonLootify.TargetCount = 0 -- Ensure TargetCount is 0 when no targets
+                Core.DungeonLootify.TargetCount = 0
                 if Settings.DebugLogs.Value then 
                     warn("No valid NPC targets!")
                     print("Core.DungeonLootify.TargetCount set to: 0")
@@ -593,7 +621,7 @@ function KillAura.Init(UI, Core, notify)
             task.wait(0.01)
         end
         cleanupDrawingObjects()
-        Core.DungeonLootify.TargetCount = 0 -- Reset TargetCount when KillAura is disabled
+        Core.DungeonLootify.TargetCount = 0
         if Settings.DebugLogs.Value then
             print("Core.DungeonLootify.TargetCount reset to: 0")
         end
@@ -653,7 +681,6 @@ function KillAura.Init(UI, Core, notify)
             Callback = function(value)
                 Settings.MaxDistance.Value = value
                 notify("KillAura", "Max Distance set to: " .. value)
-                -- Force target update to reflect new radius
                 cachedTargets = findAllTargets()
                 lastTargetUpdate = tick()
             end
@@ -855,7 +882,6 @@ function KillAura.Init(UI, Core, notify)
                 notify("KillAura", "Sliders synchronized!", true)
             end
         })
-
     return KillAura
 end
 
